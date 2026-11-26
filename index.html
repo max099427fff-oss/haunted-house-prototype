@@ -110,7 +110,13 @@
 'use strict';
 var Q = new URLSearchParams(location.search);
 var DBG = { top: Q.get('top'), skip: Q.get('skip') === '1', test: Q.get('autotest') === '1', at: Q.get('at'), yaw: Q.get('yaw'), pitch: Q.get('pitch'),
-  give: Q.get('give'), power: Q.get('power') === '1', keeper: Q.get('keeper'), freeze: Q.get('freeze') === '1', low: Q.get('q') === 'low', noshadow: Q.get('shadow') === '0', lamp: Q.get('lamp') };
+  give: Q.get('give'), power: Q.get('power') === '1', keeper: Q.get('keeper'), freeze: Q.get('freeze') === '1', low: Q.get('q') === 'low', noshadow: Q.get('shadow') === '0', lamp: Q.get('lamp'), scare: Q.get('scare'), die: Q.get('die') === '1' };
+var CFG = {
+  scare: { hallX: 11.3, hallZ: 7.8, peekX: 12.25, peekZ: 10.3, appTime: 1.6, peekTime: 1.2, flickTime: 1.1 },
+  noise: { run: 0.3, door: 0.4, bottle: 1.2, wakeAt: 2 },
+  bottle: { tipR: 0.6, keeperTipR: 0.8, fallTime: 0.42 },
+  tension: { perClue: 0.5 }
+};
 function $(id) { return document.getElementById(id); }
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 function rnd(a, b) { return a + Math.random() * (b - a); }
@@ -541,13 +547,13 @@ function marker(l, x, y, z) {
 }
 function I(o) { INTS.push(o); return o; }
 
-var S = { inv: {}, unl: {}, notes: {}, dig: [null, null, null], mbDone: false, power: false, awake: false, hidden: false, modal: false, over: false, started: false, log: [] };
+var S = { inv: {}, unl: {}, notes: {}, dig: [null, null, null], mbDone: false, power: false, awake: false, hidden: false, modal: false, over: false, started: false, log: [], flick: 0, appT: 0, tension: 0, noise: 0 };
 var P = { x: 2.8, z: 3.4, y: STEP, yaw: Math.PI, pitch: 0, run: false, stam: 1, bob: 0 };
 var SEQ = [0, 1, 2, 3];
 function ad(n) { return String(n).replace(/[0-9]/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+d); }); }
 function addLog(key, text) {
   for (var i = 0; i < S.log.length; i++) if (S.log[i][0] === key) { S.log[i][1] = text; return; }
-  S.log.push([key, text]);
+  S.log.push([key, text]); S.tension = (S.tension || 0) + CFG.tension.perClue;
 }
 function codeLog() { addLog('code', 'رمز الخزنة (٣ أرقام): ' + S.dig.map(function (d) { return d === null ? '؟' : ad(d); }).join(' ')); }
 var CHIPS = { nursery: '🗝️ مفتاح الأطفال', kitchen: '🗝️ مفتاح المطبخ', fuse: '🔌 فيوز', basement: '🗝️ مفتاح القبو', front: '🔑 مفتاح الباب الأمامي' };
@@ -655,6 +661,7 @@ function openDoor(d) {
   if (d.ax === 'h') d.side = P.z < d.cz ? -1 : 1; else d.side = P.x < d.cx ? 1 : -1;
   d.side = d.ax === 'h' ? (P.z < d.cz ? -1 : 1) : (P.x < d.cx ? -1 : 1);
   d.open = true; if (typeof creak === 'function') creak(1.1 + Math.random() * 0.5); makeNoise(d.cx, d.cz, 0.4);
+  if (d.id === 'nursery_d' || d.id === 'attic' || d.id === 'ritual_d' || d.id === 'guest_landing') { S.flick = CFG.scare.flickTime; if (typeof tone === 'function' && AC) tone(45, .4, 1.2, 'sine'); }
 }
 function useDoor(d) {
   if (d.open) return;
@@ -942,6 +949,10 @@ function body(l, x, z, rot) { // low-poly corpse on the floor
   part(new THREE.CylinderGeometry(0.06, 0.05, 0.62, 8), mCloth, 0.15, 0.06, 0.52, PI / 2, -0.2);
   part(new THREE.CylinderGeometry(0.045, 0.04, 0.5, 8), mSkin, -0.36, 0.05, -0.15, PI / 2, -0.6);
   part(new THREE.CylinderGeometry(0.045, 0.04, 0.5, 8), mSkin, 0.4, 0.05, -0.05, PI / 2, 0.9);
+  part(new THREE.BoxGeometry(0.34, 0.15, 0.3), mCloth, 0.01, 0.08, 0.38);
+  part(new THREE.CylinderGeometry(0.05, 0.045, 0.42, 8), mSkin, -0.17, 0.05, 0.95, PI / 2, 0.3);
+  part(new THREE.CylinderGeometry(0.05, 0.045, 0.4, 8), mSkin, 0.2, 0.05, 0.9, PI / 2, -0.35);
+  var hairB = new THREE.Mesh(new THREE.SphereGeometry(0.125, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), mBlack); hairB.position.set(0, 0.15, -0.47); hairB.rotation.x = -0.7; g.add(hairB);
   LG[l].add(g); floorDecal(l, x, z, 1.9, bfMats[0], rot, 1); return g;
 }
 function hanged(l, x, z) { // porcelain doll hanging from ceiling
@@ -951,6 +962,9 @@ function hanged(l, x, z) { // porcelain doll hanging from ceiling
   var head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), mPorc); head.position.y = -0.82; head.scale.set(1, 1.1, 1); g.add(head);
   [-0.05, 0.05].forEach(function (ex) { var e = new THREE.Mesh(new THREE.SphereGeometry(0.02, 6, 6), mBlack); e.position.set(ex, -0.80, 0.105); g.add(e); });
   [-1, 1].forEach(function (s) { var a = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.025, 0.4, 6), mPorc); a.position.set(s * 0.19, -1.05, 0); a.rotation.z = s * 0.15; g.add(a); var lg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.45, 6), mPorc); lg.position.set(s * 0.07, -1.62, 0); g.add(lg); });
+  var hairH = new THREE.Mesh(new THREE.SphereGeometry(0.125, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), mBlack); hairH.position.set(0, -0.80, -0.02); hairH.rotation.x = -0.45; g.add(hairH);
+  var skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.27, 0.38, 10, 1, true), new THREE.MeshLambertMaterial({ color: 0x241f1a, side: THREE.DoubleSide })); skirt.position.y = -1.34; g.add(skirt);
+  head.rotation.z = 0.28;
   g.userData.ph = Math.random() * 6; LG[l].add(g); SWAY.push(g); return g;
 }
 function skulls(l, x, z) {
@@ -1001,7 +1015,61 @@ ROOMS.forEach(function (rs, l) {
 })();
 // ritual circle with candles in the basement ritual room
 (function () { var r = ROOMS[0].filter(function (q) { return q.id === 'ritual'; })[0]; if (r) { var cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2; floorDecal(0, cx, cz, 3.2, bfMats[0], 0); candles(0, cx, cz); } })();
-function swayStep(t) { for (var i = 0; i < SWAY.length; i++) { var g = SWAY[i]; g.rotation.z = Math.sin(t * 0.9 + g.userData.ph) * 0.06; g.rotation.x = Math.sin(t * 0.7 + g.userData.ph * 2) * 0.04; } }
+function swayStep(t) { for (var i = 0; i < SWAY.length; i++) { var g = SWAY[i]; g.rotation.z = Math.sin(t * 0.9 + g.userData.ph) * 0.06; g.rotation.x = Math.sin(t * 0.7 + g.userData.ph * 2) * 0.04; }
+
+// ================= v0.7: bottles, scare events, tension =================
+var BOTTLES = [];
+function bottle(l, x, z, ty) {
+  var g = new THREE.Group();
+  var bm = new THREE.MeshStandardMaterial({ color: 0x16351f, roughness: 0.15, metalness: 0.1 });
+  var bod = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.22, 10), bm); bod.position.y = 0.11; g.add(bod);
+  var neck = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.09, 8), bm); neck.position.y = 0.26; g.add(neck);
+  g.position.set(x, LV[l] + ty, z); LG[l].add(g);
+  BOTTLES.push({ g: g, l: l, x: x, z: z, ty: ty, st: 0, t: 0 });
+}
+[[1, 3.5, 9.7, 0.8], [1, 9.2, 2.8, 0.78], [1, 9.7, 12.8, 0.78], [1, 15.7, 3.6, 0.75], [2, 9.7, 3.0, 0.75], [2, 14.0, 3.6, 0.5]].forEach(function (b) { bottle(b[0], b[1], b[2], b[3]); });
+function bottleStep(dt) {
+  for (var i = 0; i < BOTTLES.length; i++) {
+    var b = BOTTLES[i];
+    if (b.st === 0) {
+      if (!S.started || DBG.test) continue;
+      var pd = Math.hypot(P.x - b.x, P.z - b.z) < CFG.bottle.tipR && Math.abs(P.y - LV[b.l]) < 1.5;
+      var kd = S.awake && Math.hypot(K.x - b.x, K.z - b.z) < CFG.bottle.keeperTipR && Math.abs(K.y - LV[b.l]) < 1.5;
+      if (pd || kd) { b.st = 1; b.t = 0; }
+    } else if (b.st === 1) {
+      b.t += dt; var f = Math.min(1, b.t / CFG.bottle.fallTime);
+      b.g.rotation.z = f * f * Math.PI / 2;
+      b.g.position.y = LV[b.l] + b.ty + (0.05 - b.ty) * f * f;
+      if (f >= 1) { b.st = 2; if (AC) { noiseBurst(2800, 2, 0.22, 0.35, 'highpass', 0); tone(900, .15, .3, 'triangle'); } makeNoise(b.x, b.z, CFG.noise.bottle); }
+    }
+  }
+}
+function apparition(x, y, z, dur) {
+  if (S.awake || S.appT > 0) return false;
+  S.appSaved = { x: K.x, z: K.z, y: K.y, state: K.state, pause: K.pause, path: K.path };
+  K.x = x; K.z = z; K.y = y; K.state = 'pause'; K.pause = 99; K.path = [];
+  K.ry = Math.atan2(P.x - x, P.z - z);
+  S.appT = dur;
+  if (AC) { tone(38, .5, 2.2, 'sawtooth'); tone(52, .35, 2.8, 'sine'); }
+  return true;
+}
+function scareStep(dt) {
+  if (S.flick > 0) { S.flick -= dt; flash.intensity = 3.2 * (Math.random() < 0.5 ? 0.15 : 1); if (S.flick <= 0) flash.intensity = 3.2; }
+  if (S.appT > 0) {
+    S.appT -= dt;
+    if (S.appT <= 0 && S.appSaved) { var s = S.appSaved; K.x = s.x; K.z = s.z; K.y = s.y; K.state = s.state; K.pause = s.pause; K.path = s.path; K.group.visible = false; S.appSaved = null; }
+  }
+  if (!S.started || S.over || DBG.test) return;
+  if (!S.scHall && levelOf(P.y) === 2 && P.x > 7.4 && P.x < 11 && P.z > 5 && P.z < 10.5) {
+    S.scHall = true; apparition(CFG.scare.hallX, LV[2], CFG.scare.hallZ, CFG.scare.appTime);
+  }
+  if (!S.scPeek && levelOf(P.y) === 2 && P.z > 9.3 && P.x > 10.2) {
+    S.scPeek = true; apparition(CFG.scare.peekX, LV[2], CFG.scare.peekZ, CFG.scare.peekTime);
+  }
+  if (!S.scDoor && levelOf(P.y) === 2 && !D.guest_landing.open && Math.hypot(P.x - 7, P.z - 10.1) < 2) {
+    S.scDoor = true; openDoor(D.guest_landing); toast('الباب انفتح وحده...');
+  }
+} }
 // ================= audio =================
 var AC = null, master = null, boxGain = null, droneGain = null, melodyIdx = 0, audioTimer = null;
 var MEL = [0, 3, 7, 12, 7, 3, 0, 3, 7, 10, 7, 3, -2, 3, 5, 10, 5, 3, 0, 5, 8, 12, 8, 5, 3, 0, 3, -2, 0];
@@ -1284,7 +1352,9 @@ document.addEventListener('touchend', tend); document.addEventListener('touchcan
 
 function begin() {
   if (S.started) return;
-  initAudio(); if (AC && AC.resume) AC.resume(); document.addEventListener('touchend', function () { if (AC && AC.state === 'suspended') AC.resume(); }); S.started = true; $('overlay').style.display = 'none';
+  initAudio(); if (AC && AC.resume) AC.resume();
+  if (DBG.scare) setTimeout(function () { apparition(CFG.scare.hallX, LV[2], CFG.scare.hallZ, 6); }, 1500);
+  if (DBG.die) setTimeout(function () { caught(); }, 2500); document.addEventListener('touchend', function () { if (AC && AC.state === 'suspended') AC.resume(); }); S.started = true; $('overlay').style.display = 'none';
   try { var el = document.documentElement; if (isTouch && el.requestFullscreen) el.requestFullscreen().then(function () { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {}); }).catch(function () {}); } catch (e) {}
   if (isTouch) { $('joy').style.display = 'block'; $('b-fl').style.display = 'block'; $('b-run').style.display = 'block'; $('b-notes').style.display = 'block'; }
   else { $('hintkeys').style.display = 'block'; $('b-notes').style.display = 'block'; }
@@ -1380,8 +1450,9 @@ function update(dt) {
     d.mesh.rotation.y = d.base + d.ang + (d.open ? Math.sin(time * 0.8 + i) * 0.006 : 0);
   }
   for (var k = 0; k < MARKERS.length; k++) { var mm = MARKERS[k]; if (!mm.visible) continue; var pu = 1 + Math.sin(time * 3 + k) * 0.15; mm.scale.set(pu, pu, 1); mm.position.y = mm.userData.by + Math.sin(time * 2.5 + k) * 0.03; }
+  bottleStep(dt); scareStep(dt);
   // keeper model
-  if (S.awake) {
+  if (S.awake || S.appT > 0) {
     K.group.position.set(K.x, K.y, K.z); K.group.rotation.y = K.ry;
     K.group.visible = Math.abs(K.y - P.y) < 4.2;
     if (K.mixer && K.clips) {
