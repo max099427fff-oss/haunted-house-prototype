@@ -82,6 +82,7 @@
 <div class="hud" id="obj">الهدف: -</div>
 <div class="hud" id="inv"></div>
 <div class="hud" id="lvl"></div>
+<div class="hud" id="demotimer" style="display:none;top:44px"></div>
 <button id="b-notes" class="tb" style="display:none">📓</button>
 <div id="rotate">🔄<br>أدر هاتفك للوضع الأفقي للعب</div>
 <div class="hud" id="stam"><i></i></div>
@@ -111,13 +112,13 @@
 'use strict';
 var Q = new URLSearchParams(location.search);
 var DBG = { top: Q.get('top'), skip: Q.get('skip') === '1', test: Q.get('autotest') === '1', at: Q.get('at'), yaw: Q.get('yaw'), pitch: Q.get('pitch'),
-  give: Q.get('give'), power: Q.get('power') === '1', keeper: Q.get('keeper'), freeze: Q.get('freeze') === '1', low: Q.get('q') === 'low', noshadow: Q.get('shadow') === '0', lamp: Q.get('lamp'), scare: Q.get('scare'), die: Q.get('die') === '1' };
+  give: Q.get('give'), power: Q.get('power') === '1', keeper: Q.get('keeper'), freeze: Q.get('freeze') === '1', low: Q.get('q') === 'low', noshadow: Q.get('shadow') === '0', lamp: Q.get('lamp'), scare: Q.get('scare'), die: Q.get('die') === '1', demo: Q.get('demo') === '1' };
 var CFG = {
   scare: { hallX: 11.3, hallZ: 7.8, peekX: 12.25, peekZ: 10.3, appTime: 1.6, peekTime: 1.2, flickTime: 1.1 },
   noise: { run: 0.3, door: 0.4, bottle: 1.2, wakeAt: 2 },
   bottle: { tipR: 0.6, keeperTipR: 0.8, fallTime: 0.42 },
   tension: { perClue: 0.5 },
-  watcher: { firstAt: 180, minDist: 12, maxDist: 25, lookTime: 2, approachDist: 5, coolMin: 90, coolMax: 180, closerPct: 0.25 },
+  watcher: { firstAt: 180, minDist: 8, maxDist: 25, lookTime: 2, approachDist: 5, coolMin: 90, coolMax: 180, closerPct: 0.25 },
   jump: { minT: 60, maxT: 120, cueDelay: 0.8, showTime: 2.0, behind: 2.5 },
   fx: { staticNear: 10, lookTime: 3, sanityDrop: 5, shakeMax: 0.5 },
   radii: { run: 14, walk: 6, slow: 3, door: 8, dropped: 12 },
@@ -883,7 +884,7 @@ function win() {
   setTimeout(function () { showEnd('نجوتَ من بيت التهويدة', 'فتحتَ الباب الأمامي وخرجتَ إلى الفجر. هذه نهاية اليوم الأول. اليوم الثاني قادم في النسخة التالية.', 'العب مجددًا'); }, 500);
 }
 function showEnd(t, b, btn) { $('e-title').textContent = t; $('e-body').textContent = b; $('e-btn').textContent = btn; $('end').style.display = 'flex'; if (document.exitPointerLock) document.exitPointerLock(); }
-$('e-btn').onclick = function () { location.href = location.pathname + '?skip=1'; };
+$('e-btn').onclick = function () { if (DBG.demo) { $('end').style.display = 'none'; return; } location.href = location.pathname + '?skip=1'; };
 
 // ================= audio =================
 // ================= v0.4 horror dressing: blood, props, writing =================
@@ -1170,6 +1171,18 @@ function fxStep(dt) {
   } else { S.lookT = Math.max(0, S.lookT - dt); S.shake = Math.max(0, S.shake - dt * 0.25); }
   if (vis && !S.awake && dk < 9 && typeof hbT !== 'undefined') { if (performance.now() - hbT > 900) { hbT = performance.now(); heartbeat(); } }
 }
+function demoStep(dt) {
+  if (!DBG.demo || DBG.test || !S.started || S.over) return;
+  if (S.demoT === undefined) return;
+  S.demoT -= dt;
+  var el = $('demotimer');
+  if (el) { var t = Math.max(0, Math.ceil(S.demoT)); el.textContent = '⏱ تجربة: ' + ((t / 60) | 0) + ':' + ('0' + (t % 60)).slice(-2); }
+  if (S.demoT <= 0) {
+    try { localStorage.setItem('bth_demo_used', '1'); } catch (e) {}
+    S.over = true; stinger();
+    showEnd('انتهى وقت التجربة', 'شكرًا لتجربتك «بيت التهويدة»! هذه نسخة تجريبية قصيرة — النسخة الكاملة عند أخيك.', 'إغلاق');
+  }
+}
 // ================= audio =================
 var AC = null, master = null, boxGain = null, droneGain = null, melodyIdx = 0, audioTimer = null;
 var MEL = [0, 3, 7, 12, 7, 3, 0, 3, 7, 10, 7, 3, -2, 3, 5, 10, 5, 3, 0, 5, 8, 12, 8, 5, 3, 0, 3, -2, 0];
@@ -1453,6 +1466,11 @@ document.addEventListener('touchend', tend); document.addEventListener('touchcan
 function begin() {
   if (S.started) return;
   initAudio(); if (AC && AC.resume) AC.resume();
+  if (DBG.demo) {
+    if (localStorage.getItem('bth_demo_used')) { S.over = true; $('overlay').style.display = 'none'; showEnd('انتهت التجربة', 'هذه النسخة التجريبية تُفتح مرة واحدة فقط على هذا الجهاز.', 'إغلاق'); return; }
+    try { localStorage.setItem('bth_demo_used', '1'); } catch (e) {}
+    S.demoT = 90; var dtm = $('demotimer'); if (dtm) dtm.style.display = 'block';
+  }
   if (DBG.scare === 'watch') S.watch.t = 0.5;
   else if (DBG.scare === 'jump') S.jump.t = 0.5;
   else if (DBG.scare) setTimeout(function () { apparition(CFG.scare.hallX, LV[2], CFG.scare.hallZ, 6); }, 1500);
@@ -1464,6 +1482,10 @@ function begin() {
   setTimeout(function () { toast('ابحث عن مفتاح في هذه الغرفة. اقترب من الأشياء لتظهر أزرار التفاعل.', 4500); }, 400);
 }
 $('credlink').onclick = function (e) { e.preventDefault(); var c = $('credits'); c.style.display = c.style.display === 'none' ? 'block' : 'none'; };
+if (DBG.demo) {
+  if (localStorage.getItem('bth_demo_used')) { var sb = $('startbtn'); if (sb) { sb.disabled = true; sb.textContent = 'انتهت التجربة'; } }
+  var op = document.querySelector('#overlay p'); if (op && !localStorage.getItem('bth_demo_used')) op.textContent = 'نسخة تجريبية للأصدقاء: ٩٠ ثانية من اللعب، وتُفتح مرة واحدة على هذا الجهاز. ' + op.textContent;
+}
 $('startbtn').onclick = begin;
 
 // ================= interaction =================
@@ -1553,7 +1575,7 @@ function update(dt) {
     d.mesh.rotation.y = d.base + d.ang + (d.open ? Math.sin(time * 0.8 + i) * 0.006 : 0);
   }
   for (var k = 0; k < MARKERS.length; k++) { var mm = MARKERS[k]; if (!mm.visible) continue; var pu = 1 + Math.sin(time * 3 + k) * 0.15; mm.scale.set(pu, pu, 1); mm.position.y = mm.userData.by + Math.sin(time * 2.5 + k) * 0.03; }
-  bottleStep(dt); scareStep(dt); watcherStep(dt); jumpStep(dt); fxStep(dt);
+  bottleStep(dt); scareStep(dt); watcherStep(dt); jumpStep(dt); fxStep(dt); demoStep(dt);
   // keeper model
   if (S.awake || S.appT > 0) {
     K.group.position.set(K.x, K.y, K.z); K.group.rotation.y = K.ry;
