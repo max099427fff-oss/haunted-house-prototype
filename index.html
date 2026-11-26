@@ -56,6 +56,8 @@
   #act .lb{font-size:13px;line-height:16px;margin-top:2px}
   @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
   #roomlabels div{position:fixed;transform:translate(-50%,-50%);font-size:13px;font-weight:700;color:#fff;text-shadow:0 0 5px #000,0 0 5px #000;pointer-events:none;z-index:12}
+  #rotate{display:none;position:fixed;inset:0;z-index:70;background:#050505;color:#d9c48c;align-items:center;justify-content:center;text-align:center;font-size:20px;line-height:2;padding:24px}
+  body.portrait #rotate{display:flex}
   body.landscape #obj{top:6px;max-width:44%;font-size:12px;padding:4px 8px}
   body.landscape #inv{top:44px;max-width:40%}
   body.landscape #lvl{top:44px}
@@ -80,6 +82,7 @@
 <div class="hud" id="inv"></div>
 <div class="hud" id="lvl"></div>
 <button id="b-notes" class="tb" style="display:none">📓</button>
+<div id="rotate">🔄<br>أدر هاتفك للوضع الأفقي للعب</div>
 <div class="hud" id="stam"><i></i></div>
 <div class="hud" id="toast"></div>
 <div class="hud" id="hintkeys">WASD للحركة · الفأرة للنظر · E للتفاعل · F للمصباح · Shift للجري · N للملاحظات</div>
@@ -197,7 +200,7 @@ function lam(c, r, mt) { return new THREE.MeshStandardMaterial({ color: c, rough
 var mFloor = pbrC('floor', 0x8a7a70, 1.3, 0.85), mCarpet = pbrC('carpet', 0x6a4040, 1.0, 1), mTile = pbrC('tile', 0x8c9490, 1.2, 0.5),
   mCeil = pbrC('ceil', 0x6a655e, 1.0, 1), mWall = pbrC('wall', 0x7c9c98, 1.4, 0.95), mConc = pbrC('conc', 0x77756f, 1.2, 0.95),
   mBrick = pbrC('brick', 0x77706a, 1.5, 0.95), mStair = pbrC('wood', 0x7a6a60, 1.2, 0.9), mRust = pbrC('rust', 0x2c2420, 1.2, 0.85),
-  mWood = pbrC('wood', 0x8a6a55, 1.0, 0.8), mDark = pbrC('wood', 0x4a3a30, 1.0, 0.85), mGround = pbrC('ground', 0x555a50, 1.0, 1),
+  mWood = pbrC('wood', 0x6b4f3d, 1.0, 0.85), mDark = pbrC('wood', 0x352820, 1.0, 0.9), mGround = pbrC('ground', 0x555a50, 1.0, 1),
   mRoof = pbrC('conc', 0x2a2a30, 1.0, 0.9);
 var mFab = lam(0x3a1d20, 1), mFab2 = lam(0x2e3a44, 1), mMetal = lam(0x70737a, 0.5, 0.6), mWhite = lam(0xb8b2a6, 0.55), mBook = lam(0x3a2a40, 0.9),
   mBlack = lam(0x0e0e10, 0.7), mGold = lam(0x9a8040, 0.4, 0.7), mGlass = lam(0x203038, 0.2, 0.2), mBone = lam(0xc8c0ae, 0.8);
@@ -803,7 +806,14 @@ function moveK(tx, tz, ty, sp, dt) {
 }
 function makeNoise(x, z, power) {
   if (S.over) return;
-  if (!S.awake && power >= 1) { wakeKeeper(); toast('سمعتَ خطوات طويلة ثقيلة تقترب...'); }
+  S.noise = (S.noise || 0) + power;
+  if (!S.awake && S.noise >= 2) {
+    var best = null, bd = 1e9;
+    for (var i = 0; i < NODES.length; i++) { var n = NODES[i]; var d = Math.hypot(n.x - x, n.z - z); if (d > 4 && d < bd) { bd = d; best = n; } }
+    wakeKeeper();
+    if (best) { K.x = best.x; K.z = best.z; K.y = best.y; K.group.visible = true; }
+    toast('سمعتَ خطوات طويلة ثقيلة تقترب...');
+  }
   if (S.awake) { K.last = { x: x, z: z, y: P.y }; if (K.state === 'patrol') K.path = []; }
 }
 function wakeKeeper() {
@@ -845,7 +855,7 @@ function updateKeeper(dt) {
     }
   }
   // open unlocked doors in her way
-  for (var i = 0; i < DOORS.length; i++) { var d = DOORS[i]; if (!d.open && d.l === levelOf(K.y) && Math.hypot(d.cx - K.x, d.cz - K.z) < 1.6 && (!d.lock || S.unl[d.lock])) d.open = true; }
+  for (var i = 0; i < DOORS.length; i++) { var d = DOORS[i]; if (!d.open && d.l === levelOf(K.y) && Math.hypot(d.cx - K.x, d.cz - K.z) < 1.6 && (!d.lock || S.unl[d.lock])) { d.open = true; if (typeof creak === 'function') creak(0.8 + Math.random() * 0.4); } }
   if (!S.hidden && Math.hypot(P.x - K.x, P.z - K.z) < 0.95 && Math.abs(P.y - K.y) < 1.3) caught();
 }
 function caught() {
@@ -1147,7 +1157,7 @@ function openMusic() {
       var b = document.createElement('div'); b.className = 'mk'; b.style.background = COLS[i];
       b.onclick = function () {
         tone(MKNOTES[i], .3, 1.0, 'triangle'); ent.push(i); slots();
-        for (var k = 0; k < ent.length; k++) if (ent[k] !== SEQ[k]) { $('mmsg').textContent = 'لحن خاطئ... سمعتَ شيئًا يهمس.'; tone(120, .4, .8, 'sawtooth'); ent = []; setTimeout(slots, 450); return; }
+        for (var k = 0; k < ent.length; k++) if (ent[k] !== SEQ[k]) { $('mmsg').textContent = 'لحن خاطئ... سمعتَ شيئًا يهمس.'; makeNoise(15.0, 6.6, 2); tone(120, .4, .8, 'sawtooth'); ent = []; setTimeout(slots, 450); return; }
         if (ent.length === 4) { solveMusic(); $('mmsg').textContent = 'انفتح الدرج السفلي!'; setTimeout(closeCard, 1300); }
       };
       $('mkeys').appendChild(b);
@@ -1275,7 +1285,7 @@ document.addEventListener('touchend', tend); document.addEventListener('touchcan
 function begin() {
   if (S.started) return;
   initAudio(); if (AC && AC.resume) AC.resume(); document.addEventListener('touchend', function () { if (AC && AC.state === 'suspended') AC.resume(); }); S.started = true; $('overlay').style.display = 'none';
-  try { var el = document.documentElement; if (isTouch && el.requestFullscreen) el.requestFullscreen().catch(function () {}); } catch (e) {}
+  try { var el = document.documentElement; if (isTouch && el.requestFullscreen) el.requestFullscreen().then(function () { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {}); }).catch(function () {}); } catch (e) {}
   if (isTouch) { $('joy').style.display = 'block'; $('b-fl').style.display = 'block'; $('b-run').style.display = 'block'; $('b-notes').style.display = 'block'; }
   else { $('hintkeys').style.display = 'block'; $('b-notes').style.display = 'block'; }
   refreshHUD(); lvlLabel();
@@ -1343,6 +1353,7 @@ function update(dt) {
     var run = (P.run || keys.ShiftLeft || keys.ShiftRight) && m > 0.1 && P.stam > 0.02;
     if (run) P.stam = Math.max(0, P.stam - dt * 0.14); else P.stam = Math.min(1, P.stam + dt * 0.16);
     var sp = run ? 4.6 : 2.4;
+    if (m > 0.1 && AC) { window.__st = (window.__st || 0) - dt * (run ? 2.4 : 1.3); if (window.__st <= 0) { window.__st = 1; noiseBurst(run ? 300 : 220, 1.2, run ? 0.10 : 0.05, 0.08, 'lowpass', 0); if (run) makeNoise(P.x, P.z, 0.3); } }
     if (m > 0.02) { movePlayer(fx * f + rx * s, fz * f + rz * s, sp, dt); bobAmp += dt * (run ? 11 : 7.5); }
     $('stam').firstChild.style.width = (P.stam * 100) + '%';
   }
