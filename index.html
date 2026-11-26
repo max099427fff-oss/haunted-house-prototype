@@ -14,6 +14,7 @@
   #vignette{position:fixed;inset:0;pointer-events:none;z-index:5;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 35%,rgba(0,0,0,.78) 100%)}
   #redflash{position:fixed;inset:0;pointer-events:none;z-index:6;background:radial-gradient(ellipse at center,rgba(120,0,0,0) 30%,rgba(150,0,0,.55) 100%);opacity:0;transition:opacity .25s}
   #hideov{position:fixed;inset:0;pointer-events:none;z-index:7;display:none;background:linear-gradient(#000 0,#000 44%,rgba(0,0,0,.55) 46%,rgba(0,0,0,.55) 54%,#000 56%,#000 100%)}
+  #fxstatic{position:fixed;inset:0;pointer-events:none;z-index:6;opacity:0;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='128' height='128'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='128' height='128' filter='url(%23n)' opacity='0.55'/></svg>")}
   .hud{position:fixed;z-index:10;pointer-events:none}
   #obj{top:calc(8px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:calc(100% - 24px);max-width:520px;box-sizing:border-box;text-align:center;font-size:14px;line-height:1.6;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.14);padding:6px 10px;border-radius:10px}
   #inv{top:calc(64px + env(safe-area-inset-top));right:12px;display:flex;gap:6px;flex-wrap:wrap;max-width:62%}
@@ -77,7 +78,7 @@
 </head>
 <body>
 <div id="game"></div>
-<div id="vignette"></div><div id="redflash"></div><div id="hideov"></div>
+<div id="vignette"></div><div id="redflash"></div><div id="hideov"></div><div id="fxstatic"></div>
 <div class="hud" id="obj">الهدف: -</div>
 <div class="hud" id="inv"></div>
 <div class="hud" id="lvl"></div>
@@ -115,7 +116,12 @@ var CFG = {
   scare: { hallX: 11.3, hallZ: 7.8, peekX: 12.25, peekZ: 10.3, appTime: 1.6, peekTime: 1.2, flickTime: 1.1 },
   noise: { run: 0.3, door: 0.4, bottle: 1.2, wakeAt: 2 },
   bottle: { tipR: 0.6, keeperTipR: 0.8, fallTime: 0.42 },
-  tension: { perClue: 0.5 }
+  tension: { perClue: 0.5 },
+  watcher: { firstAt: 180, minDist: 12, maxDist: 25, lookTime: 2, approachDist: 5, coolMin: 90, coolMax: 180, closerPct: 0.25 },
+  jump: { minT: 60, maxT: 120, cueDelay: 0.8, showTime: 2.0, behind: 2.5 },
+  fx: { staticNear: 10, lookTime: 3, sanityDrop: 5, shakeMax: 0.5 },
+  radii: { run: 14, walk: 6, slow: 3, door: 8, dropped: 12 },
+  chase: { giveUpHide: 20 }
 };
 function $(id) { return document.getElementById(id); }
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -660,7 +666,7 @@ function hasKey(d) {
 function openDoor(d) {
   if (d.ax === 'h') d.side = P.z < d.cz ? -1 : 1; else d.side = P.x < d.cx ? 1 : -1;
   d.side = d.ax === 'h' ? (P.z < d.cz ? -1 : 1) : (P.x < d.cx ? -1 : 1);
-  d.open = true; if (typeof creak === 'function') creak(1.1 + Math.random() * 0.5); makeNoise(d.cx, d.cz, 0.4);
+  d.open = true; if (typeof creak === 'function') creak(1.1 + Math.random() * 0.5); makeNoise(d.cx, d.cz, 0.4, CFG.radii.door);
   if (d.id === 'nursery_d' || d.id === 'attic' || d.id === 'ritual_d' || d.id === 'guest_landing') { S.flick = CFG.scare.flickTime; if (typeof tone === 'function' && AC) tone(45, .4, 1.2, 'sine'); }
 }
 function useDoor(d) {
@@ -811,7 +817,7 @@ function moveK(tx, tz, ty, sp, dt) {
   if (dist > 0.001) { K.x += dx / dist * step; K.z += dz / dist * step; K.y += (ty - K.y) * (step / dist); K.ry = Math.atan2(dx, dz); }
   return dist - step;
 }
-function makeNoise(x, z, power) {
+function makeNoise(x, z, power, radius) {
   if (S.over) return;
   S.noise = (S.noise || 0) + power;
   if (!S.awake && S.noise >= 2) {
@@ -821,7 +827,9 @@ function makeNoise(x, z, power) {
     if (best) { K.x = best.x; K.z = best.z; K.y = best.y; K.group.visible = true; }
     toast('سمعتَ خطوات طويلة ثقيلة تقترب...');
   }
-  if (S.awake) { K.last = { x: x, z: z, y: P.y }; if (K.state === 'patrol') K.path = []; }
+  if (S.awake) {
+    if (!radius || Math.hypot(x - K.x, z - K.z) < radius) { K.last = { x: x, z: z, y: P.y }; if (K.state === 'patrol') K.path = []; }
+  }
 }
 function wakeKeeper() {
   S.awake = true; K.state = 'patrol'; K.path = []; K.pause = 1.5; if (typeof tone === 'function') { tone(38, .5, 2.2, 'sawtooth'); tone(52, .35, 2.8, 'sine'); }
@@ -840,7 +848,7 @@ function updateKeeper(dt) {
   var dist = Math.hypot(P.x - K.x, P.z - K.z);
   var sees = !S.hidden && kl === pl && Math.abs(P.y - K.y) < 1.2 && dist < 12 && los(K.x, K.z, P.x, P.z, kl);
   if (sees) { K.state = 'chase'; K.lose = 0; K.last = { x: P.x, z: P.z, y: P.y }; }
-  else if (K.state === 'chase') { K.lose += dt; if (K.lose > 6) { K.state = 'patrol'; K.path = []; } }
+  else if (K.state === 'chase') { K.lose += dt; var giveUp = S.hidden ? CFG.chase.giveUpHide : 6; if (K.lose > giveUp) { K.state = 'patrol'; K.path = []; } }
   var sp;
   if (K.state === 'chase') {
     sp = 3.2;
@@ -848,6 +856,7 @@ function updateKeeper(dt) {
     else {
       if (!K.path.length && K.last) { var a = nearestNode(K.x, K.z, K.y), b = nearestNode(K.last.x, K.last.z, K.last.y); var pp = a && b ? bfs(a, b) : null; K.path = pp || []; }
       if (K.path.length) { var n = K.path[0]; if (moveK(n.x, n.z, n.y, sp, dt) < 0.12) K.path.shift(); }
+      if (S.hidden && !K.path.length && K.lose > 2) { var a3 = nearestNode(K.x, K.z, K.y), t3 = null, tr3 = 0; while (tr3++ < 6 && !t3) { var cand = NODES[Math.floor(Math.random() * NODES.length)]; if (levelOf(cand.y) !== levelOf(K.y)) continue; var ddc = Math.hypot(cand.x - K.x, cand.z - K.z); if (ddc < 2 || ddc > 7) continue; t3 = cand; } if (a3 && t3) { var p3 = bfs(a3, t3); K.path = p3 || []; } }
     }
   } else {
     sp = 1.5;
@@ -1040,7 +1049,7 @@ function bottleStep(dt) {
       b.t += dt; var f = Math.min(1, b.t / CFG.bottle.fallTime);
       b.g.rotation.z = f * f * Math.PI / 2;
       b.g.position.y = LV[b.l] + b.ty + (0.05 - b.ty) * f * f;
-      if (f >= 1) { b.st = 2; if (AC) { noiseBurst(2800, 2, 0.22, 0.35, 'highpass', 0); tone(900, .15, .3, 'triangle'); } makeNoise(b.x, b.z, CFG.noise.bottle); }
+      if (f >= 1) { b.st = 2; if (AC) { noiseBurst(2800, 2, 0.22, 0.35, 'highpass', 0); tone(900, .15, .3, 'triangle'); } makeNoise(b.x, b.z, CFG.noise.bottle, CFG.radii.dropped); }
     }
   }
 }
@@ -1057,7 +1066,7 @@ function scareStep(dt) {
   if (S.flick > 0) { S.flick -= dt; flash.intensity = 3.2 * (Math.random() < 0.5 ? 0.15 : 1); if (S.flick <= 0) flash.intensity = 3.2; }
   if (S.appT > 0) {
     S.appT -= dt;
-    if (S.appT <= 0 && S.appSaved) { var s = S.appSaved; K.x = s.x; K.z = s.z; K.y = s.y; K.state = s.state; K.pause = s.pause; K.path = s.path; K.group.visible = false; S.appSaved = null; }
+    if (S.appT <= 0) apparitionEnd();
   }
   if (!S.started || S.over || DBG.test) return;
   if (!S.scHall && levelOf(P.y) === 2 && P.x > 7.4 && P.x < 11 && P.z > 5 && P.z < 10.5) {
@@ -1069,6 +1078,97 @@ function scareStep(dt) {
   if (!S.scDoor && levelOf(P.y) === 2 && !D.guest_landing.open && Math.hypot(P.x - 7, P.z - 10.1) < 2) {
     S.scDoor = true; openDoor(D.guest_landing); toast('الباب انفتح وحده...');
   }
+}
+function apparitionEnd() {
+  if (!S.appSaved) return;
+  var s = S.appSaved; K.x = s.x; K.z = s.z; K.y = s.y; K.state = s.state; K.pause = s.pause; K.path = s.path;
+  K.group.visible = false; S.appSaved = null; S.appT = 0;
+}
+// ---- v0.8: watcher (ظهور بعيد يراقب), jump-behind, proximity/sanity fx ----
+S.watch = { state: 'wait', t: CFG.watcher.firstAt, look: 0, wasLook: false };
+S.jump = { t: CFG.jump.minT + Math.random() * (CFG.jump.maxT - CFG.jump.minT), phase: 0 };
+S.sanity = 100; S.staticT = 0; S.shake = 0; S.lookT = 0;
+function endWatcher(fx) {
+  apparitionEnd();
+  if (fx) { S.staticT = Math.max(S.staticT, 0.8); if (AC) noiseBurst(3000, 3, .25, .3, 'highpass', 0); }
+  S.watch = { state: 'wait', t: CFG.watcher.coolMin + Math.random() * (CFG.watcher.coolMax - CFG.watcher.coolMin), look: 0, wasLook: false };
+}
+function watcherStep(dt) {
+  var W = S.watch;
+  if (!S.started || S.over || DBG.test) return;
+  if (S.awake || S.hidden || S.modal) { if (W.state === 'watching') endWatcher(false); return; }
+  if (W.state === 'wait') {
+    W.t -= dt;
+    if (W.t <= 0 && S.appT <= 0) {
+      var pl = levelOf(P.y), fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), best = null, bs = -1;
+      for (var i = 0; i < NODES.length; i++) {
+        var n = NODES[i]; if (levelOf(n.y) !== pl) continue;
+        var dx = n.x - P.x, dz = n.z - P.z, d = Math.hypot(dx, dz);
+        if (d < CFG.watcher.minDist || d > CFG.watcher.maxDist) continue;
+        var dot = (dx * fx + dz * fz) / d; if (dot < 0.2) continue;
+        if (!los(P.x, P.z, n.x, n.z, pl)) continue;
+        var sc = d + dot * 8; if (sc > bs) { bs = sc; best = n; }
+      }
+      if (best && apparition(best.x, best.y, best.z, 9999)) { W.state = 'watching'; W.look = 0; if (AC) whisper(); }
+      else W.t = 20;
+    }
+  } else if (W.state === 'watching') {
+    var dx2 = K.x - P.x, dz2 = K.z - P.z, d2 = Math.hypot(dx2, dz2) || 1;
+    var dot2 = (dx2 * -Math.sin(P.yaw) + dz2 * -Math.cos(P.yaw)) / d2;
+    var looking = dot2 > 0.88 && levelOf(P.y) === levelOf(K.y);
+    if (looking) W.look += dt;
+    else {
+      if (W.wasLook && d2 > 4) {
+        var nd = d2 * (1 - CFG.watcher.closerPct);
+        K.x = P.x + dx2 / d2 * nd; K.z = P.z + dz2 / d2 * nd;
+        K.ry = Math.atan2(P.x - K.x, P.z - K.z);
+      }
+      W.look = Math.max(0, W.look - dt * 2);
+    }
+    W.wasLook = looking;
+    if (W.look >= CFG.watcher.lookTime || d2 < CFG.watcher.approachDist) endWatcher(true);
+  }
+}
+function jumpStep(dt) {
+  var J = S.jump;
+  if (!S.started || S.over || DBG.test) return;
+  if (J.phase === 0) {
+    if (S.awake || S.hidden || S.modal || S.appT > 0) return;
+    J.t -= dt * (1 + (S.tension || 0) * 0.15);
+    if (J.t <= 0) { J.phase = 1; J.t = CFG.jump.cueDelay; if (AC) whisper(); }
+  } else if (J.phase === 1) {
+    J.t -= dt;
+    if (J.t <= 0) {
+      if (S.awake || S.hidden || S.modal) { J.phase = 0; J.t = 30; return; }
+      var bx = P.x + Math.sin(P.yaw) * CFG.jump.behind, bz = P.z + Math.cos(P.yaw) * CFG.jump.behind;
+      if (apparition(bx, P.y, bz, CFG.jump.showTime)) { J.phase = 2; J.t = CFG.jump.showTime; }
+      else { J.phase = 0; J.t = 30; }
+    }
+  } else if (J.phase === 2) {
+    J.t -= dt;
+    if (J.t <= 0) {
+      apparitionEnd(); S.staticT = Math.max(S.staticT, 1.0);
+      if (AC) noiseBurst(3500, 4, .3, .35, 'highpass', 0);
+      J.phase = 0; J.t = CFG.jump.minT + Math.random() * (CFG.jump.maxT - CFG.jump.minT);
+    }
+  }
+}
+function fxStep(dt) {
+  if (!S.started || S.over || DBG.test) return;
+  var dk = Math.hypot(P.x - K.x, P.z - K.z);
+  var vis = K.group.visible && (S.awake || S.appT > 0);
+  var target = 0;
+  if (vis && dk < CFG.fx.staticNear) target = (1 - dk / CFG.fx.staticNear) * 0.55;
+  if (S.staticT > 0) { S.staticT -= dt; target = Math.max(target, 0.6); }
+  var el = $('fxstatic');
+  if (el) { el.style.opacity = target.toFixed(2); if (target > 0.02) el.style.backgroundPosition = ((Math.random() * 128) | 0) + 'px ' + ((Math.random() * 128) | 0) + 'px'; }
+  var dxx = K.x - P.x, dzz = K.z - P.z, dd = Math.hypot(dxx, dzz) || 1;
+  var dot = (dxx * -Math.sin(P.yaw) + dzz * -Math.cos(P.yaw)) / dd;
+  if (vis && dd < 14 && dot > 0.85) {
+    S.lookT += dt;
+    if (S.lookT > CFG.fx.lookTime) { S.sanity = Math.max(0, S.sanity - dt * CFG.fx.sanityDrop); S.shake = Math.min(CFG.fx.shakeMax, S.shake + dt * 0.4); }
+  } else { S.lookT = Math.max(0, S.lookT - dt); S.shake = Math.max(0, S.shake - dt * 0.25); }
+  if (vis && !S.awake && dk < 9 && typeof hbT !== 'undefined') { if (performance.now() - hbT > 900) { hbT = performance.now(); heartbeat(); } }
 }
 // ================= audio =================
 var AC = null, master = null, boxGain = null, droneGain = null, melodyIdx = 0, audioTimer = null;
@@ -1353,7 +1453,9 @@ document.addEventListener('touchend', tend); document.addEventListener('touchcan
 function begin() {
   if (S.started) return;
   initAudio(); if (AC && AC.resume) AC.resume();
-  if (DBG.scare) setTimeout(function () { apparition(CFG.scare.hallX, LV[2], CFG.scare.hallZ, 6); }, 1500);
+  if (DBG.scare === 'watch') S.watch.t = 0.5;
+  else if (DBG.scare === 'jump') S.jump.t = 0.5;
+  else if (DBG.scare) setTimeout(function () { apparition(CFG.scare.hallX, LV[2], CFG.scare.hallZ, 6); }, 1500);
   if (DBG.die) setTimeout(function () { caught(); }, 2500); document.addEventListener('touchend', function () { if (AC && AC.state === 'suspended') AC.resume(); }); S.started = true; $('overlay').style.display = 'none';
   try { var el = document.documentElement; if (isTouch && el.requestFullscreen) el.requestFullscreen().then(function () { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {}); }).catch(function () {}); } catch (e) {}
   if (isTouch) { $('joy').style.display = 'block'; $('b-fl').style.display = 'block'; $('b-run').style.display = 'block'; $('b-notes').style.display = 'block'; }
@@ -1423,7 +1525,7 @@ function update(dt) {
     var run = (P.run || keys.ShiftLeft || keys.ShiftRight) && m > 0.1 && P.stam > 0.02;
     if (run) P.stam = Math.max(0, P.stam - dt * 0.14); else P.stam = Math.min(1, P.stam + dt * 0.16);
     var sp = run ? 4.6 : 2.4;
-    if (m > 0.1 && AC) { window.__st = (window.__st || 0) - dt * (run ? 2.4 : 1.3); if (window.__st <= 0) { window.__st = 1; noiseBurst(run ? 300 : 220, 1.2, run ? 0.10 : 0.05, 0.08, 'lowpass', 0); if (run) makeNoise(P.x, P.z, 0.3); } }
+    if (m > 0.1 && AC) { window.__st = (window.__st || 0) - dt * (run ? 2.4 : 1.3); if (window.__st <= 0) { window.__st = 1; noiseBurst(run ? 300 : 220, 1.2, run ? 0.10 : 0.05, 0.08, 'lowpass', 0); makeNoise(P.x, P.z, run ? 0.3 : 0.05, run ? CFG.radii.run : CFG.radii.walk); } }
     if (m > 0.02) { movePlayer(fx * f + rx * s, fz * f + rz * s, sp, dt); bobAmp += dt * (run ? 11 : 7.5); }
     $('stam').firstChild.style.width = (P.stam * 100) + '%';
   }
@@ -1433,6 +1535,7 @@ function update(dt) {
   var ey = P.y + 1.55 + bob;
   if (!DBG.top) {
     camera.position.set(P.x, ey, P.z); camera.rotation.set(P.pitch, P.yaw, 0);
+    if (S.shake > 0) { camera.rotation.x += (Math.random() - 0.5) * 0.06 * S.shake; camera.rotation.y += (Math.random() - 0.5) * 0.06 * S.shake; camera.rotation.z += (Math.random() - 0.5) * 0.03 * S.shake; }
     plight.position.set(P.x, ey - 0.1, P.z);
     var fdx = -Math.sin(P.yaw) * Math.cos(P.pitch), fdz = -Math.cos(P.yaw) * Math.cos(P.pitch), fdy = Math.sin(P.pitch);
     flash.position.set(P.x, ey, P.z); flash.target.position.set(P.x + fdx * 6, ey + fdy * 6, P.z + fdz * 6);
@@ -1450,7 +1553,7 @@ function update(dt) {
     d.mesh.rotation.y = d.base + d.ang + (d.open ? Math.sin(time * 0.8 + i) * 0.006 : 0);
   }
   for (var k = 0; k < MARKERS.length; k++) { var mm = MARKERS[k]; if (!mm.visible) continue; var pu = 1 + Math.sin(time * 3 + k) * 0.15; mm.scale.set(pu, pu, 1); mm.position.y = mm.userData.by + Math.sin(time * 2.5 + k) * 0.03; }
-  bottleStep(dt); scareStep(dt);
+  bottleStep(dt); scareStep(dt); watcherStep(dt); jumpStep(dt); fxStep(dt);
   // keeper model
   if (S.awake || S.appT > 0) {
     K.group.position.set(K.x, K.y, K.z); K.group.rotation.y = K.ry;
