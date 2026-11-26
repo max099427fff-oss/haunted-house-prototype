@@ -118,7 +118,7 @@ var CFG = {
   noise: { run: 0.3, door: 0.4, bottle: 1.2, wakeAt: 2 },
   bottle: { tipR: 0.6, keeperTipR: 0.8, fallTime: 0.42 },
   tension: { perClue: 0.5 },
-  watcher: { firstAt: 180, minDist: 8, maxDist: 25, lookTime: 2, approachDist: 5, coolMin: 90, coolMax: 180, closerPct: 0.25 },
+  watcher: { firstAt: 180, minDist: 5, maxDist: 25, lookTime: 2, approachDist: 5, coolMin: 90, coolMax: 180, closerPct: 0.25 },
   jump: { minT: 60, maxT: 120, cueDelay: 0.8, showTime: 2.0, behind: 2.5 },
   fx: { staticNear: 10, lookTime: 3, sanityDrop: 5, shakeMax: 0.5 },
   radii: { run: 14, walk: 6, slow: 3, door: 8, dropped: 12 },
@@ -1106,7 +1106,7 @@ function watcherStep(dt) {
         var n = NODES[i]; if (levelOf(n.y) !== pl) continue;
         var dx = n.x - P.x, dz = n.z - P.z, d = Math.hypot(dx, dz);
         if (d < CFG.watcher.minDist || d > CFG.watcher.maxDist) continue;
-        var dot = (dx * fx + dz * fz) / d; if (dot < 0.2) continue;
+        var dot = (dx * fx + dz * fz) / d; if (dot < -0.2) continue;
         if (!los(P.x, P.z, n.x, n.z, pl)) continue;
         var sc = d + dot * 8; if (sc > bs) { bs = sc; best = n; }
       }
