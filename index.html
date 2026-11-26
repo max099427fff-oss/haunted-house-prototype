@@ -1101,15 +1101,16 @@ function watcherStep(dt) {
   if (W.state === 'wait') {
     W.t -= dt;
     if (W.t <= 0 && S.appT <= 0) {
-      var pl = levelOf(P.y), fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), best = null, bs = -1;
+      var pl = levelOf(P.y), fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), best = null, bs = -1, rej = { lvl: 0, dist: 0, dot: 0, los: 0 };
       for (var i = 0; i < NODES.length; i++) {
-        var n = NODES[i]; if (levelOf(n.y) !== pl) continue;
+        var n = NODES[i]; if (levelOf(n.y) !== pl) { rej.lvl++; continue; }
         var dx = n.x - P.x, dz = n.z - P.z, d = Math.hypot(dx, dz);
-        if (d < CFG.watcher.minDist || d > CFG.watcher.maxDist) continue;
-        var dot = (dx * fx + dz * fz) / d; if (dot < -0.2) continue;
-        if (!los(P.x, P.z, n.x, n.z, pl)) continue;
+        if (d < CFG.watcher.minDist || d > CFG.watcher.maxDist) { rej.dist++; continue; }
+        var dot = (dx * fx + dz * fz) / d; if (dot < -0.2) { rej.dot++; continue; }
+        if (!los(P.x, P.z, n.x, n.z, pl)) { rej.los++; continue; }
         var sc = d + dot * 8; if (sc > bs) { bs = sc; best = n; }
       }
+      W.rej = rej; W.cand = best ? [best.x, best.z] : null;
       if (best && apparition(best.x, best.y, best.z, 9999)) { W.state = 'watching'; W.look = 0; if (AC) whisper(); }
       else W.t = 20;
     }
@@ -1722,7 +1723,7 @@ function autotest() {
   pre.textContent = (ok ? 'ALL_OK' : 'FAILED') + '\n' + out.filter(function (x) { return ok ? false : x.indexOf('ok') !== 0; }).join('\n') + '\n(' + out.length + ' checks)'; document.body.appendChild(pre);
 }
 if (DBG.test) setTimeout(function () { try { autotest(); } catch (e) { document.title = 'ERR ' + e.message; var p = document.createElement('pre'); p.id = 'testout'; p.style.cssText = 'position:fixed;inset:0;z-index:999;background:#000;color:#f55'; p.textContent = 'ERR ' + e.stack; document.body.appendChild(p); } }, 300);
-window.G = { S: S, P: P, K: K, D: D, INTS: INTS, wakeKeeper: wakeKeeper };
+window.G = { S: S, P: P, K: K, D: D, INTS: INTS, wakeKeeper: wakeKeeper, NODES: NODES, los: los, levelOf: levelOf };
 })();
 </script>
 </body>
