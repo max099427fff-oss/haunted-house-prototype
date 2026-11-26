@@ -1015,7 +1015,7 @@ ROOMS.forEach(function (rs, l) {
 })();
 // ritual circle with candles in the basement ritual room
 (function () { var r = ROOMS[0].filter(function (q) { return q.id === 'ritual'; })[0]; if (r) { var cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2; floorDecal(0, cx, cz, 3.2, bfMats[0], 0); candles(0, cx, cz); } })();
-function swayStep(t) { for (var i = 0; i < SWAY.length; i++) { var g = SWAY[i]; g.rotation.z = Math.sin(t * 0.9 + g.userData.ph) * 0.06; g.rotation.x = Math.sin(t * 0.7 + g.userData.ph * 2) * 0.04; }
+function swayStep(t) { for (var i = 0; i < SWAY.length; i++) { var g = SWAY[i]; g.rotation.z = Math.sin(t * 0.9 + g.userData.ph) * 0.06; g.rotation.x = Math.sin(t * 0.7 + g.userData.ph * 2) * 0.04; } }
 
 // ================= v0.7: bottles, scare events, tension =================
 var BOTTLES = [];
@@ -1069,7 +1069,7 @@ function scareStep(dt) {
   if (!S.scDoor && levelOf(P.y) === 2 && !D.guest_landing.open && Math.hypot(P.x - 7, P.z - 10.1) < 2) {
     S.scDoor = true; openDoor(D.guest_landing); toast('الباب انفتح وحده...');
   }
-} }
+}
 // ================= audio =================
 var AC = null, master = null, boxGain = null, droneGain = null, melodyIdx = 0, audioTimer = null;
 var MEL = [0, 3, 7, 12, 7, 3, 0, 3, 7, 10, 7, 3, -2, 3, 5, 10, 5, 3, 0, 5, 8, 12, 8, 5, 3, 0, 3, -2, 0];
