@@ -96,13 +96,13 @@
 <div id="modal"><div class="card" id="card"></div></div>
 <div id="overlay">
   <h1>بيت التهويدة</h1>
-  <p>نموذج أولي للبيت والألغاز (الإصدار 0.3): بيت مظلم من طابقين مع قبو وسقف وسطح.</p>
+  <p>نموذج أولي للبيت والألغاز (الإصدار 0.9.2): بيت مظلم من طابقين مع قبو وسقف وسطح.</p>
   <p>استيقظتَ في غرفة النوم العلوية. ابحث عن المفاتيح والأوراق، وحلّ الألغاز، واجمع ما يلزم لفتح الباب الأمامي. عندما تعود الكهرباء — أو عندما تُحدث ضجّة كبيرة — سيستيقظ «سلندرمان».</p>
   <p>تظهر أزرار التفاعل فقط عندما تقترب من شيء يمكن استخدامه (فتح، التقاط، فحص، اختباء).</p>
   <button class="btn" id="startbtn">ابدأ</button>
   <button class="btn" id="qbtn" style="margin-top:8px;font-size:13px;padding:6px 14px">الجودة</button>
   <div class="sub">سماعات مفضّلة · يعمل بالطول وبالعرض · <a href="#" id="credlink" style="color:#8a7a55;text-decoration:underline">الحقوق</a></div>
-  <div id="credits" style="display:none;font-size:11px;opacity:.6;max-width:400px;margin:10px auto 0;line-height:1.7;direction:ltr;text-align:left">Slenderman model by Vicente Betoret Ferrero, CC BY 4.0 (<a href="https://creativecommons.org/licenses/by/4.0/" style="color:#8a7a55">https://creativecommons.org/licenses/by/4.0/</a>), source <a href="https://sketchfab.com/3d-models/slenderman-animated-c64b2587728c4e90bd73a38f1666f76b" style="color:#8a7a55">sketchfab.com</a>. Animations added and retargeted (Rikindle3D CC0 zombie pack).</div>
+  <div id="credits" style="display:none;font-size:11px;opacity:.6;max-width:400px;margin:10px auto 0;line-height:1.7;direction:ltr;text-align:left">Slenderman model by Vicente Betoret Ferrero, CC BY 4.0 (<a href="https://creativecommons.org/licenses/by/4.0/" style="color:#8a7a55">https://creativecommons.org/licenses/by/4.0/</a>), source <a href="https://sketchfab.com/3d-models/slenderman-animated-c64b2587728c4e90bd73a38f1666f76b" style="color:#8a7a55">sketchfab.com</a>. Animations added and retargeted (Rikindle3D CC0 zombie pack). Textures: Poly Haven (CC0), polyhaven.com.</div>
 </div>
 <div id="end"><h1 id="e-title"></h1><p id="e-body"></p><button class="btn" id="e-btn">إعادة المحاولة</button></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -133,7 +133,7 @@ var STEP = 2.9, WH = 2.7, DH = 2.15, T = 0.16, W = 18, DP = 14;
 var LV = [-STEP, 0, STEP];
 var scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020203);
-scene.fog = new THREE.FogExp2(0x030304, DBG.top ? 0.002 : (DBG.high ? 0.062 : 0.075));
+scene.fog = new THREE.FogExp2(0x030304, DBG.top ? 0.002 : (DBG.high ? 0.05 : 0.075));
 var camera = new THREE.PerspectiveCamera(78, innerWidth / innerHeight, 0.05, 80);
 camera.rotation.order = 'YXZ';
 scene.add(camera);
@@ -228,12 +228,27 @@ function upgradeTex() {
     var nt = loader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/' + res + '/' + id + '/' + id + '_nor_gl_' + res + '.jpg', function () { TEXUP.done++; });
     dt.wrapS = dt.wrapT = nt.wrapS = nt.wrapT = THREE.RepeatWrapping;
     dt.anisotropy = nt.anisotropy = DBG.high ? 8 : 4; dt.encoding = THREE.sRGBEncoding;
-    cache[key] = [dt, nt];
+    if (DBG.high) {
+      var rt2 = loader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/' + id + '/' + id + '_rough_2k.jpg');
+      var at2 = loader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/' + id + '/' + id + '_ao_2k.jpg');
+      rt2.wrapS = rt2.wrapT = at2.wrapS = at2.wrapT = THREE.RepeatWrapping; rt2.anisotropy = at2.anisotropy = 8;
+      cache[key] = [dt, nt, rt2, at2];
+    } else cache[key] = [dt, nt];
   }
   TEXUP.total = 16;
+  if (DBG.high) {
+    var regSet = {}; for (var q = 0; q < TEXREG.length; q++) regSet[TEXREG[q].m.uuid] = 1;
+    scene.traverse(function (o) {
+      if (!o.isMesh || !o.geometry || !o.geometry.attributes.uv || o.geometry.attributes.uv2) return;
+      var ms = Array.isArray(o.material) ? o.material : [o.material], hit = false;
+      for (var z = 0; z < ms.length; z++) if (regSet[ms[z].uuid]) hit = true;
+      if (hit) o.geometry.setAttribute('uv2', o.geometry.attributes.uv);
+    });
+  }
   for (var i = 0; i < TEXREG.length; i++) {
     var r = TEXREG[i], c = cache[r.key]; if (!c) continue;
     r.m.map = c[0]; r.m.normalMap = c[1];
+    if (c[2]) { r.m.roughnessMap = c[2]; r.m.aoMap = c[3]; r.m.aoMapIntensity = 1.0; }
     r.m.needsUpdate = true;
   }
 }
@@ -1105,7 +1120,7 @@ function shelfAt(l, x, z, ry) {
   }
   g.position.set(x, LV[l], z); g.rotation.y = ry || 0; LG[l].add(g);
 }
-shelfAt(1, 8.9, 0.18, 0);
+shelfAt(1, 7.95, 0.18, 0);
 function floorLampAt(l, x, z) {
   var g = new THREE.Group();
   var base = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.04, 12), lam(0x2c241c, 0.7)); base.position.y = 0.02; g.add(shade(base));
@@ -1494,6 +1509,81 @@ var plight = new THREE.PointLight(0xffd9a0, 0.26, 5, 2); scene.add(plight);
 var flash = new THREE.SpotLight(0xfff2d8, 3.2, 22, 0.46, 0.55, 1.6); scene.add(flash); scene.add(flash.target);
 if (SHADOWS) { flash.castShadow = true; flash.shadow.mapSize.set(DBG.high ? 1024 : 512, DBG.high ? 1024 : 512); flash.shadow.camera.near = 0.2; flash.shadow.camera.far = 20; flash.shadow.bias = -0.0005; }
 var flashOn = true;
+// ================= v0.9.2 high-quality extras: post-processing, volumetric flashlight cone, dust =================
+var COMP = null, HIFX = null;
+if (DBG.high) {
+  (function () {
+    var coneL = 7.5, coneR = Math.tan(0.46) * coneL;
+    var cg = new THREE.ConeGeometry(coneR, coneL, 28, 1, true); cg.translate(0, -coneL / 2, 0); cg.rotateX(-Math.PI / 2);
+    var cm = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+      fragmentShader: 'varying vec2 vUv; void main(){ float t = 1.0 - vUv.y; float a = smoothstep(0.04, 0.3, t) * pow(1.0 - t, 1.4) * 0.05; gl_FragColor = vec4(1.0, 0.93, 0.78, a); }'
+    });
+    var cone = new THREE.Mesh(cg, cm); cone.frustumCulled = false; cone.renderOrder = 5; scene.add(cone);
+    var N = 260, pos = new Float32Array(N * 3), rnd = [];
+    for (var i = 0; i < N; i++) { pos[i * 3] = (Math.random() - .5) * 9; pos[i * 3 + 1] = (Math.random() - .5) * 3.4; pos[i * 3 + 2] = (Math.random() - .5) * 9; rnd.push(Math.random() * 6.28); }
+    var dg = new THREE.BufferGeometry(); dg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    var dust = new THREE.Points(dg, new THREE.PointsMaterial({ size: 0.001, transparent: true, opacity: 0 })); dust.visible = false;
+    HIFX = { cone: cone, dust: dust, pos: pos, rnd: rnd, t: 0 };
+    // post-processing (loaded on demand from unpkg, same Three.js r128 examples)
+    var base = 'https://unpkg.com/three@0.128.0/examples/js/';
+    var files = ['shaders/CopyShader.js', 'shaders/LuminosityHighPassShader.js', 'math/SimplexNoise.js', 'shaders/SSAOShader.js', 'postprocessing/EffectComposer.js', 'postprocessing/ShaderPass.js', 'postprocessing/MaskPass.js', 'postprocessing/RenderPass.js', 'postprocessing/SSAOPass.js', 'postprocessing/UnrealBloomPass.js'];
+    var fi = 0;
+    (function next() {
+      if (fi >= files.length) { buildPost(); return; }
+      var s = document.createElement('script'); s.src = base + files[fi++]; s.onload = next; s.onerror = function () { console.warn('postfx unavailable'); }; document.head.appendChild(s);
+    })();
+    function buildPost() {
+      try {
+        var pr = renderer.getPixelRatio();
+        var rt = new THREE.WebGLRenderTarget(innerWidth * pr, innerHeight * pr, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+        var c = new THREE.EffectComposer(renderer, rt); c.setPixelRatio(pr); c.setSize(innerWidth, innerHeight); c._pr = pr; c._w = innerWidth; c._h = innerHeight;
+        c.addPass(new THREE.RenderPass(scene, camera));
+        if (Q.get('ssao') !== '0') { var sp = new THREE.SSAOPass(scene, camera, innerWidth, innerHeight); sp.kernelRadius = 0.5; sp.minDistance = 0.004; sp.maxDistance = 0.1; c.addPass(sp); }
+        if (Q.get('bloom') !== '0') c.addPass(new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.1, 0.3, 0.92));
+        var fin = new THREE.ShaderPass({
+          uniforms: { tDiffuse: { value: null }, time: { value: 0 }, res: { value: new THREE.Vector2(innerWidth, innerHeight) } },
+          vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+          fragmentShader: [
+            'uniform sampler2D tDiffuse; uniform float time; uniform vec2 res; varying vec2 vUv;',
+            'float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }',
+            'vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0.0, 1.0); }',
+            'void main(){',
+            '  vec2 d = vUv - 0.5; vec2 px = 1.0 / res;',
+            '  vec3 c0 = texture2D(tDiffuse, vUv).rgb;',
+            '  vec3 bl = (texture2D(tDiffuse, vUv + vec2(px.x,0.0)).rgb + texture2D(tDiffuse, vUv - vec2(px.x,0.0)).rgb + texture2D(tDiffuse, vUv + vec2(0.0,px.y)).rgb + texture2D(tDiffuse, vUv - vec2(0.0,px.y)).rgb) * 0.25;',
+            '  vec3 col = max(c0 + (c0 - bl) * 0.55, 0.0);',
+            '  col = aces(col * 1.15);',
+            '  col = pow(col, vec3(1.0/2.2));',
+            '  col *= 1.0 - smoothstep(0.45, 0.95, length(d) * 1.2) * 0.18;',
+            '  gl_FragColor = vec4(col, 1.0);',
+            '}'].join('\n')
+        });
+        fin.renderToScreen = true; c.addPass(fin); c._fin = fin;
+        renderer.toneMapping = THREE.NoToneMapping;
+        COMP = c;
+      } catch (e) { console.warn('postfx failed', e); COMP = null; }
+    }
+  })();
+}
+function hiFxStep(dt) {
+  if (!HIFX) return;
+  HIFX.t += dt;
+  var cn = HIFX.cone; cn.visible = flash.visible;
+  if (cn.visible) { cn.position.copy(flash.position); cn.lookAt(flash.target.position); }
+  var d = HIFX.dust, ps = HIFX.pos, T = HIFX.t;
+  for (var i = 0; i < ps.length / 3; i++) {
+    ps[i * 3] += Math.sin(T * 0.3 + HIFX.rnd[i]) * dt * 0.05; ps[i * 3 + 1] += Math.cos(T * 0.2 + HIFX.rnd[i]) * dt * 0.03 - dt * 0.02; ps[i * 3 + 2] += Math.cos(T * 0.25 + HIFX.rnd[i]) * dt * 0.05;
+    if (ps[i * 3 + 1] < -1.7) ps[i * 3 + 1] = 1.7;
+  }
+  d.geometry.attributes.position.needsUpdate = true; d.position.set(camera.position.x, camera.position.y, camera.position.z);
+  if (COMP) {
+    var pr = renderer.getPixelRatio();
+    if (COMP._pr !== pr || COMP._w !== innerWidth || COMP._h !== innerHeight) { COMP._pr = pr; COMP._w = innerWidth; COMP._h = innerHeight; COMP.setPixelRatio(pr); COMP.setSize(innerWidth, innerHeight); COMP._fin.uniforms.res.value.set(innerWidth, innerHeight); }
+    COMP._fin.uniforms.time.value = T;
+  }
+}
 var POOL = [new THREE.PointLight(0xffc880, 0, 9, 2), new THREE.PointLight(0xffc880, 0, 9, 2)]; POOL.forEach(function (p) { scene.add(p); });
 function updateLamps() {
   var pl = levelOf(P.y), cand = [];
@@ -1720,7 +1810,7 @@ function adapt(n) {
 }
 function loop() {
   var n = performance.now(), dt = Math.min(0.05, (n - last) / 1000); last = n;
-  update(dt); renderer.render(scene, camera);
+  update(dt); hiFxStep(dt); if (COMP) COMP.render(); else renderer.render(scene, camera);
   adapt(n);
   requestAnimationFrame(loop);
 }
