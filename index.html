@@ -708,6 +708,7 @@ try {
     var sc = 2.3 / h;
     model.scale.set(sc, sc, sc);
     model.position.y = -box.min.y * sc;
+    model.rotation.y = Math.PI;
     model.traverse(function (o) { if (o.isMesh) { o.frustumCulled = false; o.castShadow = false; o.receiveShadow = false; } });
     while (K.group.children.length) K.group.remove(K.group.children[0]);
     K.group.add(model);
