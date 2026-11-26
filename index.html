@@ -94,9 +94,9 @@
   <p>نموذج أولي للبيت والألغاز (الإصدار 0.3): بيت مظلم من طابقين مع قبو وسقف وسطح.</p>
   <p>استيقظتَ في غرفة النوم العلوية. ابحث عن المفاتيح والأوراق، وحلّ الألغاز، واجمع ما يلزم لفتح الباب الأمامي. عندما تعود الكهرباء — أو عندما تُحدث ضجّة كبيرة — سيستيقظ «سلندرمان».</p>
   <p>تظهر أزرار التفاعل فقط عندما تقترب من شيء يمكن استخدامه (فتح، التقاط، فحص، اختباء).</p>
-  <p style="font-size:11px;opacity:.55;margin:6px 0 0">Slenderman model by vicente betoret ferrero, CC-BY 4.0</p>
   <button class="btn" id="startbtn">ابدأ</button>
-  <div class="sub">سماعات مفضّلة · يعمل بالطول وبالعرض</div>
+  <div class="sub">سماعات مفضّلة · يعمل بالطول وبالعرض · <a href="#" id="credlink" style="color:#8a7a55;text-decoration:underline">الحقوق</a></div>
+  <div id="credits" style="display:none;font-size:11px;opacity:.6;max-width:400px;margin:10px auto 0;line-height:1.7;direction:ltr;text-align:left">Slenderman model by Vicente Betoret Ferrero, CC BY 4.0 (<a href="https://creativecommons.org/licenses/by/4.0/" style="color:#8a7a55">https://creativecommons.org/licenses/by/4.0/</a>), source <a href="https://sketchfab.com/3d-models/slenderman-animated-c64b2587728c4e90bd73a38f1666f76b" style="color:#8a7a55">sketchfab.com</a>. Animations added and retargeted (Rikindle3D CC0 zombie pack).</div>
 </div>
 <div id="end"><h1 id="e-title"></h1><p id="e-body"></p><button class="btn" id="e-btn">إعادة المحاولة</button></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -1280,6 +1280,7 @@ function begin() {
   refreshHUD(); lvlLabel();
   setTimeout(function () { toast('ابحث عن مفتاح في هذه الغرفة. اقترب من الأشياء لتظهر أزرار التفاعل.', 4500); }, 400);
 }
+$('credlink').onclick = function (e) { e.preventDefault(); var c = $('credits'); c.style.display = c.style.display === 'none' ? 'block' : 'none'; };
 $('startbtn').onclick = begin;
 
 // ================= interaction =================
