@@ -234,7 +234,7 @@ function upgradeTex() {
   for (var i = 0; i < TEXREG.length; i++) {
     var r = TEXREG[i], c = cache[r.key]; if (!c) continue;
     r.m.map = c[0]; r.m.normalMap = c[1];
-    r.m.color.setHex(0xdedbd6); r.m.needsUpdate = true;
+    r.m.needsUpdate = true;
   }
 }
 function lam(c, r, mt) { return new THREE.MeshStandardMaterial({ color: c, roughness: r === undefined ? 0.85 : r, metalness: mt || 0 }); }
