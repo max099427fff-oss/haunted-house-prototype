@@ -100,6 +100,7 @@
   <p>استيقظتَ في غرفة النوم العلوية. ابحث عن المفاتيح والأوراق، وحلّ الألغاز، واجمع ما يلزم لفتح الباب الأمامي. عندما تعود الكهرباء — أو عندما تُحدث ضجّة كبيرة — سيستيقظ «سلندرمان».</p>
   <p>تظهر أزرار التفاعل فقط عندما تقترب من شيء يمكن استخدامه (فتح، التقاط، فحص، اختباء).</p>
   <button class="btn" id="startbtn">ابدأ</button>
+  <button class="btn" id="qbtn" style="margin-top:8px;font-size:13px;padding:6px 14px">الجودة</button>
   <div class="sub">سماعات مفضّلة · يعمل بالطول وبالعرض · <a href="#" id="credlink" style="color:#8a7a55;text-decoration:underline">الحقوق</a></div>
   <div id="credits" style="display:none;font-size:11px;opacity:.6;max-width:400px;margin:10px auto 0;line-height:1.7;direction:ltr;text-align:left">Slenderman model by Vicente Betoret Ferrero, CC BY 4.0 (<a href="https://creativecommons.org/licenses/by/4.0/" style="color:#8a7a55">https://creativecommons.org/licenses/by/4.0/</a>), source <a href="https://sketchfab.com/3d-models/slenderman-animated-c64b2587728c4e90bd73a38f1666f76b" style="color:#8a7a55">sketchfab.com</a>. Animations added and retargeted (Rikindle3D CC0 zombie pack).</div>
 </div>
@@ -112,7 +113,7 @@
 'use strict';
 var Q = new URLSearchParams(location.search);
 var DBG = { top: Q.get('top'), skip: Q.get('skip') === '1', test: Q.get('autotest') === '1', at: Q.get('at'), yaw: Q.get('yaw'), pitch: Q.get('pitch'),
-  give: Q.get('give'), power: Q.get('power') === '1', keeper: Q.get('keeper'), freeze: Q.get('freeze') === '1', low: Q.get('q') === 'low', noshadow: Q.get('shadow') === '0', lamp: Q.get('lamp'), scare: Q.get('scare'), die: Q.get('die') === '1', demo: Q.get('demo') === '1' };
+  give: Q.get('give'), power: Q.get('power') === '1', keeper: Q.get('keeper'), freeze: Q.get('freeze') === '1', low: Q.get('q') === 'low', noshadow: Q.get('shadow') === '0', lamp: Q.get('lamp'), scare: Q.get('scare'), die: Q.get('die') === '1', demo: Q.get('demo') === '1', high: Q.get('q') === 'high' };
 var CFG = {
   scare: { hallX: 11.3, hallZ: 7.8, peekX: 12.25, peekZ: 10.3, appTime: 1.6, peekTime: 1.2, flickTime: 1.1 },
   noise: { run: 0.3, door: 0.4, bottle: 1.2, wakeAt: 2 },
@@ -132,18 +133,19 @@ var STEP = 2.9, WH = 2.7, DH = 2.15, T = 0.16, W = 18, DP = 14;
 var LV = [-STEP, 0, STEP];
 var scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020203);
-scene.fog = new THREE.FogExp2(0x030304, DBG.top ? 0.002 : 0.075);
+scene.fog = new THREE.FogExp2(0x030304, DBG.top ? 0.002 : (DBG.high ? 0.062 : 0.075));
 var camera = new THREE.PerspectiveCamera(78, innerWidth / innerHeight, 0.05, 80);
 camera.rotation.order = 'YXZ';
 scene.add(camera);
 var renderer = new THREE.WebGLRenderer({ antialias: !DBG.low, powerPreference: 'high-performance' });
 renderer.outputEncoding = THREE.sRGBEncoding;
-var PR_LV = [1.5, 1.25, 1, 0.8, 0.65], prI = DBG.low ? 2 : 0, prMax = Math.min(window.devicePixelRatio || 1, 1.5);
+if (DBG.high) { renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15; }
+var PR_LV = [1.5, 1.25, 1, 0.8, 0.65], prI = DBG.low ? 2 : 0, prMax = Math.min(window.devicePixelRatio || 1, DBG.high ? 2 : 1.5);
 function curPR() { return Math.min(prMax, PR_LV[prI]); }
 renderer.setPixelRatio(curPR());
 renderer.setSize(innerWidth, innerHeight);
 var SHADOWS = !DBG.noshadow && !DBG.top && !DBG.test;
-renderer.shadowMap.enabled = SHADOWS; renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.enabled = SHADOWS; renderer.shadowMap.type = DBG.high ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 $('game').appendChild(renderer.domElement);
 function fit() {
   var a = innerWidth / innerHeight;
@@ -168,7 +170,7 @@ ground:['data:image/jpeg;base64,/9j/4AAQSkZJRgABAQABLAEsAAD/2wBDAA4KCw0LCQ4NDA0Q
 var TL = new THREE.TextureLoader();
 function ptex(key, i) {
   var t = TL.load(TEXDATA[key][i]);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = DBG.high ? 8 : 4;
   if (i === 0) t.encoding = THREE.sRGBEncoding;
   return t;
 }
@@ -205,9 +207,35 @@ function portraitTex() {
 }
 // ================= materials (CC0 Poly Haven textures, PBR with normal maps) =================
 var TC = {};
+var TEXREG = [];
 function pbrC(key, tint, ns, rough) {
   if (!TC[key]) { TC[key] = [ptex(key, 0), ptex(key, 1)]; }
-  return new THREE.MeshStandardMaterial({ map: TC[key][0], normalMap: TC[key][1], normalScale: new THREE.Vector2(ns, ns), roughness: rough, metalness: key === 'rust' ? 0.15 : 0, color: tint });
+  var m = new THREE.MeshStandardMaterial({ map: TC[key][0], normalMap: TC[key][1], normalScale: new THREE.Vector2(ns, ns), roughness: rough, metalness: key === 'rust' ? 0.15 : 0, color: tint });
+  TEXREG.push({ m: m, key: key }); return m;
+}
+// ================= v0.9 hi-res remote textures (Poly Haven CC0, lazy) =================
+// low/default: 2K diff+normal. high (?q=high): 4K diff+normal. Embedded 512px set stays as instant placeholder + offline fallback.
+var HIKEYS = { wall: 'damaged_plaster', floor: 'wood_floor', wood: 'dark_wood', tile: 'brown_floor_tiles', brick: 'brick_4', carpet: 'dirty_carpet', conc: 'chipped_concrete', ceil: 'ceiling_interior' };
+var TEXUP = { mode: 'off', done: 0, total: 0 };
+function upgradeTex() {
+  var res = DBG.high ? '4k' : '2k';
+  TEXUP.mode = res;
+  var loader = new THREE.TextureLoader(); loader.crossOrigin = 'anonymous';
+  var cache = {};
+  for (var key in HIKEYS) {
+    var id = HIKEYS[key];
+    var dt = loader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/' + res + '/' + id + '/' + id + '_diff_' + res + '.jpg', function () { TEXUP.done++; });
+    var nt = loader.load('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/' + res + '/' + id + '/' + id + '_nor_gl_' + res + '.jpg', function () { TEXUP.done++; });
+    dt.wrapS = dt.wrapT = nt.wrapS = nt.wrapT = THREE.RepeatWrapping;
+    dt.anisotropy = nt.anisotropy = DBG.high ? 8 : 4; dt.encoding = THREE.sRGBEncoding;
+    cache[key] = [dt, nt];
+  }
+  TEXUP.total = 16;
+  for (var i = 0; i < TEXREG.length; i++) {
+    var r = TEXREG[i], c = cache[r.key]; if (!c) continue;
+    r.m.map = c[0]; r.m.normalMap = c[1];
+    r.m.color.setHex(0xdedbd6); r.m.needsUpdate = true;
+  }
 }
 function lam(c, r, mt) { return new THREE.MeshStandardMaterial({ color: c, roughness: r === undefined ? 0.85 : r, metalness: mt || 0 }); }
 var mFloor = pbrC('floor', 0x8a7a70, 1.3, 0.85), mCarpet = pbrC('carpet', 0x6a4040, 1.0, 1), mTile = pbrC('tile', 0x8c9490, 1.2, 0.5),
@@ -1025,6 +1053,85 @@ ROOMS.forEach(function (rs, l) {
 })();
 // ritual circle with candles in the basement ritual room
 (function () { var r = ROOMS[0].filter(function (q) { return q.id === 'ritual'; })[0]; if (r) { var cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2; floorDecal(0, cx, cz, 3.2, bfMats[0], 0); candles(0, cx, cz); } })();
+// ================= v0.9 realism props: checker floors, sink, gas cylinder, shelf, floor lamp, fluorescent =================
+var FLUOR = [];
+var texCheck = ctex(256, 256, function (g, w, h) {
+  var s = w / 8;
+  for (var y = 0; y < 8; y++) for (var x = 0; x < 8; x++) { g.fillStyle = (x + y) % 2 ? '#2b2b2e' : '#b8b0a0'; g.fillRect(x * s, y * s, s, s); }
+  noise(g, w, h, 900, .18);
+});
+texCheck.wrapS = texCheck.wrapT = THREE.RepeatWrapping;
+function checkFloor(l, x0, z0, x1, z1) {
+  var t = texCheck.clone(); t.needsUpdate = true; t.repeat.set((x1 - x0) / 2.4, (z1 - z0) / 2.4);
+  var m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), new THREE.MeshStandardMaterial({ map: t, roughness: 0.35, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: -1 }));
+  m.rotation.x = -PI / 2; m.position.set((x0 + x1) / 2, LV[l] + 0.02, (z0 + z1) / 2);
+  shade(m); LG[l].add(m);
+}
+checkFloor(1, 7, 0, 12, 5);       // kitchen
+checkFloor(2, 7, 10.5, 12, 14);   // upper bath
+checkFloor(1, 12, 5.5, 18, 8.5);  // bath
+var mPorc = new THREE.MeshStandardMaterial({ color: 0xcfc9bd, roughness: 0.35, metalness: 0.05 });
+var mChrom = new THREE.MeshStandardMaterial({ color: 0x9aa2a8, roughness: 0.25, metalness: 0.85 });
+function sinkAt(l, x, z, ry) {
+  var g = new THREE.Group();
+  var cab = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.72, 0.55), lam(0x4a3a2c, 0.8)); cab.position.y = 0.36; g.add(shade(cab));
+  var basin = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.14, 0.62), mPorc); basin.position.y = 0.79; g.add(shade(basin));
+  var bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.16, 0.1, 14, 1, true), mPorc); bowl.position.y = 0.82; g.add(bowl);
+  var pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.3, 8), mChrom); pipe.position.set(0, 1.0, -0.24); g.add(pipe);
+  var arc = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.018, 8, 12, Math.PI), mChrom); arc.position.set(0, 1.15, -0.12); arc.rotation.y = PI / 2; g.add(arc);
+  g.position.set(x, LV[l], z); g.rotation.y = ry || 0; LG[l].add(g);
+}
+sinkAt(1, 11.2, 0.85, 0);
+sinkAt(2, 8.2, 13.45, PI);
+function gasCylinder(l, x, z) {
+  var g = new THREE.Group();
+  var bodyM = new THREE.MeshStandardMaterial({ color: 0x7a2a20, roughness: 0.55, metalness: 0.3 });
+  var bod = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.72, 14), bodyM); bod.position.y = 0.42; g.add(shade(bod));
+  var top = new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 10, 0, PI * 2, 0, PI / 2), bodyM); top.position.y = 0.78; g.add(shade(top));
+  var bot = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.06, 14), lam(0x2a2a2c, 0.7, 0.4)); bot.position.y = 0.05; g.add(bot);
+  var valve = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.09, 8), mChrom); valve.position.y = 0.93; g.add(valve);
+  var wheel = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.012, 6, 12), lam(0x1c1c1e, 0.6, 0.5)); wheel.position.y = 0.99; wheel.rotation.x = PI / 2; g.add(wheel);
+  g.position.set(x, LV[l], z); LG[l].add(g);
+}
+gasCylinder(1, 11.55, 0.62);
+function shelfAt(l, x, z, ry) {
+  var g = new THREE.Group();
+  for (var i = 0; i < 3; i++) {
+    var b = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.045, 0.28), lam(0x3d2f22, 0.85)); b.position.y = 1.15 + i * 0.42; g.add(shade(b));
+  }
+  for (var j = 0; j < 6; j++) {
+    var jar = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.16 + (j % 3) * 0.05, 8), new THREE.MeshStandardMaterial({ color: [0x6a5a3a, 0x4a5a52, 0x5a3a3a][j % 3], roughness: 0.4, metalness: 0.1 }));
+    jar.position.set(-0.5 + j * 0.2, 1.15 + (j % 3) * 0.42 + 0.11, 0); g.add(jar);
+  }
+  g.position.set(x, LV[l], z); g.rotation.y = ry || 0; LG[l].add(g);
+}
+shelfAt(1, 8.9, 0.18, 0);
+function floorLampAt(l, x, z) {
+  var g = new THREE.Group();
+  var base = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.04, 12), lam(0x2c241c, 0.7)); base.position.y = 0.02; g.add(shade(base));
+  var pole = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1.35, 8), lam(0x3a3026, 0.5, 0.6)); pole.position.y = 0.7; g.add(pole);
+  var shadeM = new THREE.MeshStandardMaterial({ color: 0xd8b98a, roughness: 0.9, side: THREE.DoubleSide, emissive: 0xff9a40, emissiveIntensity: 0.55 });
+  var cone = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.16, 0.22, 12, 1, true), shadeM); cone.position.y = 1.45; g.add(cone);
+  g.position.set(x, LV[l], z); LG[l].add(g);
+  if (DBG.high) { var pl = new THREE.PointLight(0xffa050, 0.55, 5, 2); pl.position.set(x, LV[l] + 1.4, z); LG[l].add(pl); }
+}
+floorLampAt(1, 0.7, 0.7);
+function fluorAt(l, x, z) {
+  var g = new THREE.Group();
+  var housing = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.05, 0.14), lam(0x8a8a8c, 0.4, 0.7)); g.add(housing);
+  var tubeM = new THREE.MeshStandardMaterial({ color: 0xdfe8e4, emissive: 0xcfe0d8, emissiveIntensity: 1.6 });
+  var tube = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.05, 8), tubeM); tube.rotation.z = PI / 2; tube.position.y = -0.035; g.add(tube);
+  g.position.set(x, LV[l] + 2.78, z); LG[l].add(g);
+  FLUOR.push(tubeM);
+}
+fluorAt(1, 9.5, 2.5);
+fluorAt(2, 9.5, 12.2);
+function fluorStep(t) {
+  for (var i = 0; i < FLUOR.length; i++) {
+    var m = FLUOR[i];
+    m.emissiveIntensity = 1.6 * (Math.random() < 0.035 ? 0.25 + Math.random() * 0.5 : 0.94 + Math.sin(t * 37 + i * 9) * 0.06);
+  }
+}
 function swayStep(t) { for (var i = 0; i < SWAY.length; i++) { var g = SWAY[i]; g.rotation.z = Math.sin(t * 0.9 + g.userData.ph) * 0.06; g.rotation.x = Math.sin(t * 0.7 + g.userData.ph * 2) * 0.04; } }
 
 // ================= v0.7: bottles, scare events, tension =================
@@ -1382,9 +1489,10 @@ function exitHide() {
 
 // ================= lights (dark: near-player light + flashlight + flickering lamps)
 var ambient = new THREE.AmbientLight(0x14161f, 0.26); scene.add(ambient);
+var hemi = new THREE.HemisphereLight(0x2a2e3c, 0x191410, DBG.high ? 0.34 : 0.22); scene.add(hemi);
 var plight = new THREE.PointLight(0xffd9a0, 0.26, 5, 2); scene.add(plight);
 var flash = new THREE.SpotLight(0xfff2d8, 3.2, 22, 0.46, 0.55, 1.6); scene.add(flash); scene.add(flash.target);
-if (SHADOWS) { flash.castShadow = true; flash.shadow.mapSize.set(512, 512); flash.shadow.camera.near = 0.2; flash.shadow.camera.far = 20; flash.shadow.bias = -0.0005; }
+if (SHADOWS) { flash.castShadow = true; flash.shadow.mapSize.set(DBG.high ? 1024 : 512, DBG.high ? 1024 : 512); flash.shadow.camera.near = 0.2; flash.shadow.camera.far = 20; flash.shadow.bias = -0.0005; }
 var flashOn = true;
 var POOL = [new THREE.PointLight(0xffc880, 0, 9, 2), new THREE.PointLight(0xffc880, 0, 9, 2)]; POOL.forEach(function (p) { scene.add(p); });
 function updateLamps() {
@@ -1475,13 +1583,17 @@ function begin() {
   if (DBG.scare === 'watch') S.watch.t = 0.5;
   else if (DBG.scare === 'jump') S.jump.t = 0.5;
   else if (DBG.scare) setTimeout(function () { apparition(CFG.scare.hallX, LV[2], CFG.scare.hallZ, 6); }, 1500);
-  if (DBG.die) setTimeout(function () { caught(); }, 2500); document.addEventListener('touchend', function () { if (AC && AC.state === 'suspended') AC.resume(); }); S.started = true; $('overlay').style.display = 'none';
+  if (DBG.die) setTimeout(function () { caught(); }, 2500); document.addEventListener('touchend', function () { if (AC && AC.state === 'suspended') AC.resume(); }); S.started = true; $('overlay').style.display = 'none'; upgradeTex();
   try { var el = document.documentElement; if (isTouch && el.requestFullscreen) el.requestFullscreen().then(function () { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {}); }).catch(function () {}); } catch (e) {}
   if (isTouch) { $('joy').style.display = 'block'; $('b-fl').style.display = 'block'; $('b-run').style.display = 'block'; $('b-notes').style.display = 'block'; }
   else { $('hintkeys').style.display = 'block'; $('b-notes').style.display = 'block'; }
   refreshHUD(); lvlLabel();
   setTimeout(function () { toast('ابحث عن مفتاح في هذه الغرفة. اقترب من الأشياء لتظهر أزرار التفاعل.', 4500); }, 400);
 }
+var qbtn = $('qbtn');
+function qbtnLabel() { qbtn.textContent = DBG.high ? '⚙ الجودة: عالية' : '⚙ الجودة: عادية'; }
+qbtnLabel();
+qbtn.onclick = function () { var u = new URL(location.href); if (DBG.high) u.searchParams.delete('q'); else u.searchParams.set('q', 'high'); location.href = u.toString(); };
 $('credlink').onclick = function (e) { e.preventDefault(); var c = $('credits'); c.style.display = c.style.display === 'none' ? 'block' : 'none'; };
 if (DBG.demo) {
   if (localStorage.getItem('bth_demo_used')) { var sb = $('startbtn'); if (sb) { sb.disabled = true; sb.textContent = 'انتهت التجربة'; } }
@@ -1576,7 +1688,7 @@ function update(dt) {
     d.mesh.rotation.y = d.base + d.ang + (d.open ? Math.sin(time * 0.8 + i) * 0.006 : 0);
   }
   for (var k = 0; k < MARKERS.length; k++) { var mm = MARKERS[k]; if (!mm.visible) continue; var pu = 1 + Math.sin(time * 3 + k) * 0.15; mm.scale.set(pu, pu, 1); mm.position.y = mm.userData.by + Math.sin(time * 2.5 + k) * 0.03; }
-  bottleStep(dt); scareStep(dt); watcherStep(dt); jumpStep(dt); fxStep(dt); demoStep(dt);
+  bottleStep(dt); scareStep(dt); watcherStep(dt); jumpStep(dt); fxStep(dt); demoStep(dt); fluorStep(time);
   // keeper model
   if (S.awake || S.appT > 0) {
     K.group.position.set(K.x, K.y, K.z); K.group.rotation.y = K.ry;
